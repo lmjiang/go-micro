@@ -140,6 +140,9 @@ func (g *grpcClient) call(ctx context.Context, node *registry.Node, req client.R
 		if opts := g.getGrpcCallOptions(); opts != nil {
 			grpcCallOptions = append(grpcCallOptions, opts...)
 		}
+		if opts := g.getGrpcCallOptionsFromOpts(opts); opts != nil {
+			grpcCallOptions = append(grpcCallOptions, opts...)
+		}
 		err := cc.Invoke(ctx, methodToGRPC(req.Service(), req.Endpoint()), req.Body(), rsp, grpcCallOptions...)
 		ch <- microError(err)
 	}()
@@ -552,6 +555,26 @@ func (g *grpcClient) getGrpcDialOptions() []grpc.DialOption {
 	}
 
 	opts, ok := v.([]grpc.DialOption)
+
+	if !ok {
+		return nil
+	}
+
+	return opts
+}
+
+func (g *grpcClient) getGrpcCallOptionsFromOpts(copts client.CallOptions) []grpc.CallOption {
+	if copts.Context == nil {
+		return nil
+	}
+
+	v := copts.Context.Value("grpcCallOptions")
+
+	if v == nil {
+		return nil
+	}
+
+	opts, ok := v.([]grpc.CallOption)
 
 	if !ok {
 		return nil
