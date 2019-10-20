@@ -1,4 +1,4 @@
-module github.com/micro/go-micro
+module github.com/lmjiang/go-micro
 
 go 1.13
 
