@@ -7,16 +7,16 @@ import (
 
 	client "github.com/coreos/etcd/clientv3"
 	"github.com/coreos/etcd/mvcc/mvccpb"
-	"github.com/micro/go-micro/config/options"
 	"github.com/micro/go-micro/store"
 )
 
 type ekv struct {
-	options.Options
-	kv client.KV
+	options store.Options
+	kv      client.KV
 }
 
 func (e *ekv) Read(keys ...string) ([]*store.Record, error) {
+	//nolint:prealloc
 	var values []*mvccpb.KeyValue
 
 	for _, key := range keys {
@@ -32,7 +32,7 @@ func (e *ekv) Read(keys ...string) ([]*store.Record, error) {
 		values = append(values, keyval.Kvs...)
 	}
 
-	var records []*store.Record
+	records := make([]*store.Record, 0, len(values))
 
 	for _, kv := range values {
 		records = append(records, &store.Record{
@@ -68,15 +68,15 @@ func (e *ekv) Write(records ...*store.Record) error {
 	return gerr
 }
 
-func (e *ekv) Sync() ([]*store.Record, error) {
+func (e *ekv) List() ([]*store.Record, error) {
 	keyval, err := e.kv.Get(context.Background(), "/", client.WithPrefix())
 	if err != nil {
 		return nil, err
 	}
-	var vals []*store.Record
 	if keyval == nil || len(keyval.Kvs) == 0 {
-		return vals, nil
+		return nil, nil
 	}
+	vals := make([]*store.Record, 0, len(keyval.Kvs))
 	for _, keyv := range keyval.Kvs {
 		vals = append(vals, &store.Record{
 			Key:   string(keyv.Key),
@@ -90,14 +90,14 @@ func (e *ekv) String() string {
 	return "etcd"
 }
 
-func NewStore(opts ...options.Option) store.Store {
-	options := options.NewOptions(opts...)
-
-	var endpoints []string
-
-	if e, ok := options.Values().Get("store.nodes"); ok {
-		endpoints = e.([]string)
+func NewStore(opts ...store.Option) store.Store {
+	var options store.Options
+	for _, o := range opts {
+		o(&options)
 	}
+
+	// get the endpoints
+	endpoints := options.Nodes
 
 	if len(endpoints) == 0 {
 		endpoints = []string{"http://127.0.0.1:2379"}
@@ -112,7 +112,7 @@ func NewStore(opts ...options.Option) store.Store {
 	}
 
 	return &ekv{
-		Options: options,
+		options: options,
 		kv:      client.NewKV(c),
 	}
 }

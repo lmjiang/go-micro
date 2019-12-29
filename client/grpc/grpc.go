@@ -13,6 +13,7 @@ import (
 	"github.com/micro/go-micro/client"
 	"github.com/micro/go-micro/client/selector"
 	"github.com/micro/go-micro/codec"
+	raw "github.com/micro/go-micro/codec/bytes"
 	"github.com/micro/go-micro/errors"
 	"github.com/micro/go-micro/metadata"
 	"github.com/micro/go-micro/registry"
@@ -246,6 +247,28 @@ func (g *grpcClient) stream(ctx context.Context, node *registry.Node, req client
 	}, nil
 }
 
+func (g *grpcClient) poolMaxStreams() int {
+	if g.opts.Context == nil {
+		return DefaultPoolMaxStreams
+	}
+	v := g.opts.Context.Value(poolMaxStreams{})
+	if v == nil {
+		return DefaultPoolMaxStreams
+	}
+	return v.(int)
+}
+
+func (g *grpcClient) poolMaxIdle() int {
+	if g.opts.Context == nil {
+		return DefaultPoolMaxIdle
+	}
+	v := g.opts.Context.Value(poolMaxIdle{})
+	if v == nil {
+		return DefaultPoolMaxIdle
+	}
+	return v.(int)
+}
+
 func (g *grpcClient) maxRecvMsgSizeValue() int {
 	if g.opts.Context == nil {
 		return DefaultMaxRecvMsgSize
@@ -280,16 +303,6 @@ func (g *grpcClient) newGRPCCodec(contentType string) (encoding.Codec, error) {
 	}
 	if c, ok := defaultGRPCCodecs[contentType]; ok {
 		return wrapCodec{c}, nil
-	}
-	return nil, fmt.Errorf("Unsupported Content-Type: %s", contentType)
-}
-
-func (g *grpcClient) newCodec(contentType string) (codec.NewCodec, error) {
-	if c, ok := g.opts.Codecs[contentType]; ok {
-		return c, nil
-	}
-	if cf, ok := defaultRPCCodecs[contentType]; ok {
-		return cf, nil
 	}
 	return nil, fmt.Errorf("Unsupported Content-Type: %s", contentType)
 }
@@ -341,7 +354,9 @@ func (g *grpcClient) Call(ctx context.Context, req client.Request, rsp interface
 	d, ok := ctx.Deadline()
 	if !ok {
 		// no deadline so we create a new one
-		ctx, _ = context.WithTimeout(ctx, callOpts.RequestTimeout)
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, callOpts.RequestTimeout)
+		defer cancel()
 	} else {
 		// got a deadline so no need to setup context
 		// but we need to set the timeout we pass along
@@ -513,29 +528,56 @@ func (g *grpcClient) Stream(ctx context.Context, req client.Request, opts ...cli
 }
 
 func (g *grpcClient) Publish(ctx context.Context, p client.Message, opts ...client.PublishOption) error {
+	var options client.PublishOptions
+	for _, o := range opts {
+		o(&options)
+	}
+
 	md, ok := metadata.FromContext(ctx)
 	if !ok {
 		md = make(map[string]string)
 	}
 	md["Content-Type"] = p.ContentType()
+	md["Micro-Topic"] = p.Topic()
 
 	cf, err := g.newGRPCCodec(p.ContentType())
 	if err != nil {
 		return errors.InternalServerError("go.micro.client", err.Error())
 	}
 
-	b, err := cf.Marshal(p.Payload())
-	if err != nil {
-		return errors.InternalServerError("go.micro.client", err.Error())
+	var body []byte
+
+	// passed in raw data
+	if d, ok := p.Payload().(*raw.Frame); ok {
+		body = d.Data
+	} else {
+		// set the body
+		b, err := cf.Marshal(p.Payload())
+		if err != nil {
+			return errors.InternalServerError("go.micro.client", err.Error())
+		}
+		body = b
 	}
 
 	g.once.Do(func() {
 		g.opts.Broker.Connect()
 	})
 
-	return g.opts.Broker.Publish(p.Topic(), &broker.Message{
+	topic := p.Topic()
+
+	// get proxy topic
+	if prx := os.Getenv("MICRO_PROXY"); len(prx) > 0 {
+		options.Exchange = prx
+	}
+
+	// get the exchange
+	if len(options.Exchange) > 0 {
+		topic = options.Exchange
+	}
+
+	return g.opts.Broker.Publish(topic, &broker.Message{
 		Header: md,
-		Body:   b,
+		Body:   body,
 	})
 }
 
@@ -642,8 +684,8 @@ func newClient(opts ...client.Option) client.Client {
 	rc := &grpcClient{
 		once: sync.Once{},
 		opts: options,
-		pool: newPool(options.PoolSize, options.PoolTTL),
 	}
+	rc.pool = newPool(options.PoolSize, options.PoolTTL, rc.poolMaxIdle(), rc.poolMaxStreams())
 
 	c := client.Client(rc)
 

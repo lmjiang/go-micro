@@ -1,4 +1,4 @@
-// Package memoy provides a sync.Mutex implementation of the lock for local use
+// Package memory provides a sync.Mutex implementation of the lock for local use
 package memory
 
 import (
@@ -61,7 +61,7 @@ func (m *memoryLock) Acquire(id string, opts ...lock.AcquireOption) error {
 		// set a timer for the leftover ttl
 		if live > lk.ttl {
 			// release the lock if it expired
-			m.Release(id)
+			_ = m.Release(id)
 		} else {
 			ttl = time.After(live)
 		}
@@ -94,7 +94,7 @@ lockLoop:
 			break lockLoop
 		case <-ttl:
 			// ttl exceeded
-			m.Release(id)
+			_ = m.Release(id)
 			// TODO: check the ttl again above
 			ttl = nil
 			// try acquire

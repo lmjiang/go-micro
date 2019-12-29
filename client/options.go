@@ -125,6 +125,10 @@ func newOptions(options ...Option) Options {
 		opts.Transport = transport.DefaultTransport
 	}
 
+	if opts.Context == nil {
+		opts.Context = context.Background()
+	}
+
 	return opts
 }
 
@@ -156,7 +160,7 @@ func PoolSize(d int) Option {
 	}
 }
 
-// PoolSize sets the connection pool size
+// PoolTTL sets the connection pool ttl
 func PoolTTL(d time.Duration) Option {
 	return func(o *Options) {
 		o.PoolTTL = d

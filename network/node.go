@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	pb "github.com/micro/go-micro/network/proto"
+	pb "github.com/micro/go-micro/network/service/proto"
 )
 
 var (
@@ -28,6 +28,8 @@ type node struct {
 	id string
 	// address is node address
 	address string
+	// link on which we communicate with the peer
+	link string
 	// peers are nodes with direct link to this node
 	peers map[string]*node
 	// network returns the node network
@@ -127,7 +129,7 @@ func (n *node) UpdatePeer(peer *node) error {
 
 // RefreshPeer updates node timestamp
 // It returns false if the peer has not been found.
-func (n *node) RefreshPeer(id string, now time.Time) error {
+func (n *node) RefreshPeer(id, link string, now time.Time) error {
 	n.Lock()
 	defer n.Unlock()
 
@@ -136,9 +138,10 @@ func (n *node) RefreshPeer(id string, now time.Time) error {
 		return ErrPeerNotFound
 	}
 
-	if peer.lastSeen.Before(now) {
-		peer.lastSeen = now
-	}
+	// set peer link
+	peer.link = link
+	// set last seen
+	peer.lastSeen = now
 
 	return nil
 }
@@ -158,7 +161,7 @@ func (n *node) Nodes() []Node {
 
 	visited := n.walk(untilNoMorePeers, justWalk)
 
-	var nodes []Node
+	nodes := make([]Node, 0, len(visited))
 	// collect all the nodes and return them
 	for _, node := range visited {
 		nodes = append(nodes, node)
@@ -216,7 +219,7 @@ func (n *node) DeletePeerNode(id string) error {
 
 // PruneStalePeerNodes prune the peers that have not been seen for longer than given time
 // It returns a map of the the nodes that got pruned
-func (n *node) PruneStalePeerNodes(pruneTime time.Duration) map[string]*node {
+func (n *node) PruneStalePeers(pruneTime time.Duration) map[string]*node {
 	n.Lock()
 	defer n.Unlock()
 
@@ -282,7 +285,7 @@ func (n *node) Peers() []Node {
 	n.RLock()
 	defer n.RUnlock()
 
-	var peers []Node
+	peers := make([]Node, 0, len(n.peers))
 	for _, nodePeer := range n.peers {
 		peer := nodePeer.getTopology(MaxDepth)
 		peers = append(peers, peer)

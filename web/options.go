@@ -25,6 +25,9 @@ type Options struct {
 	RegisterTTL      time.Duration
 	RegisterInterval time.Duration
 
+	// RegisterCheck runs a check function before registering the service
+	RegisterCheck func(context.Context) error
+
 	Server  *http.Server
 	Handler http.Handler
 
@@ -62,6 +65,10 @@ func newOptions(opts ...Option) Options {
 		o(&opt)
 	}
 
+	if opt.RegisterCheck == nil {
+		opt.RegisterCheck = DefaultRegisterCheck
+	}
+
 	return opt
 }
 
@@ -69,6 +76,16 @@ func newOptions(opts ...Option) Options {
 func Name(n string) Option {
 	return func(o *Options) {
 		o.Name = n
+	}
+}
+
+// Icon specifies an icon url to load in the UI
+func Icon(ico string) Option {
+	return func(o *Options) {
+		if o.Metadata == nil {
+			o.Metadata = make(map[string]string)
+		}
+		o.Metadata["icon"] = ico
 	}
 }
 
@@ -116,18 +133,21 @@ func Context(ctx context.Context) Option {
 	}
 }
 
+// Registry used for discovery
 func Registry(r registry.Registry) Option {
 	return func(o *Options) {
 		o.Registry = r
 	}
 }
 
+// Register the service with a TTL
 func RegisterTTL(t time.Duration) Option {
 	return func(o *Options) {
 		o.RegisterTTL = t
 	}
 }
 
+// Register the service with at interval
 func RegisterInterval(t time.Duration) Option {
 	return func(o *Options) {
 		o.RegisterInterval = t
@@ -213,5 +233,12 @@ func TLSConfig(t *tls.Config) Option {
 func StaticDir(d string) Option {
 	return func(o *Options) {
 		o.StaticDir = d
+	}
+}
+
+// RegisterCheck run func before registry service
+func RegisterCheck(fn func(context.Context) error) Option {
+	return func(o *Options) {
+		o.RegisterCheck = fn
 	}
 }

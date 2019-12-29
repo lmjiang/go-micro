@@ -7,6 +7,7 @@ func testSetup() (*table, Route) {
 
 	route := Route{
 		Service: "dest.svc",
+		Address: "dest.addr",
 		Gateway: "dest.gw",
 		Network: "dest.network",
 		Router:  "src.router",
@@ -126,6 +127,8 @@ func TestQuery(t *testing.T) {
 	routes, err := table.Query()
 	if err != nil {
 		t.Errorf("error looking up routes: %s", err)
+	} else if len(routes) == 0 {
+		t.Errorf("error looking up routes: not found")
 	}
 
 	// query routes particular network

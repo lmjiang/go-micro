@@ -5,12 +5,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/micro/go-micro/config/options"
 	"github.com/micro/go-micro/store"
 )
 
 type memoryStore struct {
-	options.Options
+	options store.Options
 
 	sync.RWMutex
 	values map[string]*memoryRecord
@@ -21,10 +20,11 @@ type memoryRecord struct {
 	c time.Time
 }
 
-func (m *memoryStore) Sync() ([]*store.Record, error) {
+func (m *memoryStore) List() ([]*store.Record, error) {
 	m.RLock()
 	defer m.RUnlock()
 
+	//nolint:prealloc
 	var values []*store.Record
 
 	for _, v := range m.values {
@@ -52,6 +52,7 @@ func (m *memoryStore) Read(keys ...string) ([]*store.Record, error) {
 	m.RLock()
 	defer m.RUnlock()
 
+	//nolint:prealloc
 	var records []*store.Record
 
 	for _, key := range keys {
@@ -108,11 +109,14 @@ func (m *memoryStore) Delete(keys ...string) error {
 }
 
 // NewStore returns a new store.Store
-func NewStore(opts ...options.Option) store.Store {
-	options := options.NewOptions(opts...)
+func NewStore(opts ...store.Option) store.Store {
+	var options store.Options
+	for _, o := range opts {
+		o(&options)
+	}
 
 	return &memoryStore{
-		Options: options,
+		options: options,
 		values:  make(map[string]*memoryRecord),
 	}
 }

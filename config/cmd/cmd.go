@@ -27,9 +27,9 @@ import (
 
 	// registries
 	"github.com/micro/go-micro/registry"
-	"github.com/micro/go-micro/registry/consul"
 	"github.com/micro/go-micro/registry/etcd"
 	"github.com/micro/go-micro/registry/mdns"
+	kreg "github.com/micro/go-micro/registry/kubernetes"
 	rmem "github.com/micro/go-micro/registry/memory"
 	regSrv "github.com/micro/go-micro/registry/service"
 
@@ -45,6 +45,10 @@ import (
 	thttp "github.com/micro/go-micro/transport/http"
 	tmem "github.com/micro/go-micro/transport/memory"
 	"github.com/micro/go-micro/transport/quic"
+
+	// runtimes
+	"github.com/micro/go-micro/runtime"
+	"github.com/micro/go-micro/runtime/kubernetes"
 )
 
 type Cmd interface {
@@ -153,14 +157,25 @@ var (
 			Usage:  "Comma-separated list of broker addresses",
 		},
 		cli.StringFlag{
+			Name:   "profile",
+			Usage:  "Debug profiler for cpu and memory stats",
+			EnvVar: "MICRO_DEBUG_PROFILE",
+		},
+		cli.StringFlag{
 			Name:   "registry",
 			EnvVar: "MICRO_REGISTRY",
-			Usage:  "Registry for discovery. consul, etcd, mdns",
+			Usage:  "Registry for discovery. etcd, mdns",
 		},
 		cli.StringFlag{
 			Name:   "registry_address",
 			EnvVar: "MICRO_REGISTRY_ADDRESS",
 			Usage:  "Comma-separated list of registry addresses",
+		},
+		cli.StringFlag{
+			Name:   "runtime",
+			Usage:  "Runtime for building and running services e.g local, kubernetes",
+			EnvVar: "MICRO_RUNTIME",
+			Value:  "local",
 		},
 		cli.StringFlag{
 			Name:   "selector",
@@ -180,11 +195,10 @@ var (
 	}
 
 	DefaultBrokers = map[string]func(...broker.Option) broker.Broker{
-		"go.micro.broker": brokerSrv.NewBroker,
-		"service":         brokerSrv.NewBroker,
-		"http":            http.NewBroker,
-		"memory":          memory.NewBroker,
-		"nats":            nats.NewBroker,
+		"service": brokerSrv.NewBroker,
+		"http":    http.NewBroker,
+		"memory":  memory.NewBroker,
+		"nats":    nats.NewBroker,
 	}
 
 	DefaultClients = map[string]func(...client.Option) client.Client{
@@ -194,12 +208,11 @@ var (
 	}
 
 	DefaultRegistries = map[string]func(...registry.Option) registry.Registry{
-		"go.micro.registry": regSrv.NewRegistry,
-		"service":           regSrv.NewRegistry,
-		"consul":            consul.NewRegistry,
-		"etcd":              etcd.NewRegistry,
-		"mdns":              mdns.NewRegistry,
-		"memory":            rmem.NewRegistry,
+		"service": regSrv.NewRegistry,
+		"etcd":    etcd.NewRegistry,
+		"mdns":    mdns.NewRegistry,
+		"memory":  rmem.NewRegistry,
+		"kubernetes": kreg.NewRegistry,
 	}
 
 	DefaultSelectors = map[string]func(...selector.Option) selector.Selector{
@@ -223,6 +236,11 @@ var (
 		"quic":   quic.NewTransport,
 	}
 
+	DefaultRuntimes = map[string]func(...runtime.Option) runtime.Runtime{
+		"local":      runtime.NewRuntime,
+		"kubernetes": kubernetes.NewRuntime,
+	}
+
 	// used for default selection as the fall back
 	defaultClient    = "rpc"
 	defaultServer    = "rpc"
@@ -230,6 +248,7 @@ var (
 	defaultRegistry  = "mdns"
 	defaultSelector  = "registry"
 	defaultTransport = "http"
+	defaultRuntime   = "local"
 )
 
 func init() {
@@ -249,6 +268,7 @@ func newCmd(opts ...Option) Cmd {
 		Server:    &server.DefaultServer,
 		Selector:  &selector.DefaultSelector,
 		Transport: &transport.DefaultTransport,
+		Runtime:   &runtime.DefaultRuntime,
 
 		Brokers:    DefaultBrokers,
 		Clients:    DefaultClients,
@@ -256,6 +276,7 @@ func newCmd(opts ...Option) Cmd {
 		Selectors:  DefaultSelectors,
 		Servers:    DefaultServers,
 		Transports: DefaultTransports,
+		Runtimes:   DefaultRuntimes,
 	}
 
 	for _, o := range opts {
@@ -295,6 +316,16 @@ func (c *cmd) Before(ctx *cli.Context) error {
 	// If flags are set then use them otherwise do nothing
 	var serverOpts []server.Option
 	var clientOpts []client.Option
+
+	// Set the runtime
+	if name := ctx.String("runtime"); len(name) > 0 {
+		r, ok := c.opts.Runtimes[name]
+		if !ok {
+			return fmt.Errorf("Unsupported runtime: %s", name)
+		}
+
+		*c.opts.Runtime = r()
+	}
 
 	// Set the client
 	if name := ctx.String("client"); len(name) > 0 {

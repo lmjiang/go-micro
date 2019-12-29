@@ -38,7 +38,7 @@ func (c *etcd) Read() (*source.ChangeSet, error) {
 		return nil, fmt.Errorf("source not found: %s", c.prefix)
 	}
 
-	var kvs []*mvccpb.KeyValue
+	kvs := make([]*mvccpb.KeyValue, 0, len(rsp.Kvs))
 	for _, v := range rsp.Kvs {
 		kvs = append(kvs, (*mvccpb.KeyValue)(v))
 	}
@@ -74,6 +74,10 @@ func (c *etcd) Watch() (source.Watcher, error) {
 		return nil, err
 	}
 	return newWatcher(c.prefix, c.stripPrefix, c.client.Watcher, cs, c.opts)
+}
+
+func (c *etcd) Write(cs *source.ChangeSet) error {
+	return nil
 }
 
 func NewSource(opts ...source.Option) source.Source {
