@@ -72,5 +72,6 @@ func (g *grpcStream) setError(e error) {
 // stream should still be able to receive after this function call
 // TODO: should the conn be closed in another way?
 func (g *grpcStream) Close() error {
+	defer g.conn.Close()
 	return g.stream.CloseSend()
 }
