@@ -28,8 +28,8 @@ import (
 	// registries
 	"github.com/micro/go-micro/registry"
 	"github.com/micro/go-micro/registry/etcd"
-	"github.com/micro/go-micro/registry/mdns"
 	kreg "github.com/micro/go-micro/registry/kubernetes"
+	"github.com/micro/go-micro/registry/mdns"
 	rmem "github.com/micro/go-micro/registry/memory"
 	regSrv "github.com/micro/go-micro/registry/service"
 
@@ -44,7 +44,6 @@ import (
 	tgrpc "github.com/micro/go-micro/transport/grpc"
 	thttp "github.com/micro/go-micro/transport/http"
 	tmem "github.com/micro/go-micro/transport/memory"
-	"github.com/micro/go-micro/transport/quic"
 
 	// runtimes
 	"github.com/micro/go-micro/runtime"
@@ -208,10 +207,10 @@ var (
 	}
 
 	DefaultRegistries = map[string]func(...registry.Option) registry.Registry{
-		"service": regSrv.NewRegistry,
-		"etcd":    etcd.NewRegistry,
-		"mdns":    mdns.NewRegistry,
-		"memory":  rmem.NewRegistry,
+		"service":    regSrv.NewRegistry,
+		"etcd":       etcd.NewRegistry,
+		"mdns":       mdns.NewRegistry,
+		"memory":     rmem.NewRegistry,
 		"kubernetes": kreg.NewRegistry,
 	}
 
@@ -233,7 +232,6 @@ var (
 		"memory": tmem.NewTransport,
 		"http":   thttp.NewTransport,
 		"grpc":   tgrpc.NewTransport,
-		"quic":   quic.NewTransport,
 	}
 
 	DefaultRuntimes = map[string]func(...runtime.Option) runtime.Runtime{
